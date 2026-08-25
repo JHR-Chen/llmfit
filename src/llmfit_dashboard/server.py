@@ -11,6 +11,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import webbrowser
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -216,8 +217,11 @@ manager = RuntimeManager()
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(application: FastAPI):
     await manager.start()
+    if manager.status == "ready" and getattr(application.state, "open_browser", False):
+        url = getattr(application.state, "public_url", f"http://{DEFAULT_HOST}:{DEFAULT_PORT}")
+        asyncio.create_task(asyncio.to_thread(webbrowser.open, url))
     try:
         yield
     finally:
@@ -291,12 +295,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     args = parser.parse_args(argv)
 
-    if not args.no_open:
-        import threading
-        import webbrowser
-
-        threading.Timer(1.0, lambda: webbrowser.open(f"http://{args.host}:{args.port}")).start()
-
+    app.state.open_browser = not args.no_open
+    app.state.public_url = f"http://{args.host}:{args.port}"
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 
 
